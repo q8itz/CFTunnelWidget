@@ -57,11 +57,17 @@ class TestUISmoke(unittest.TestCase):
         popover.close()
 
     def test_settings_dialog_roundtrip(self) -> None:
-        cfg = AppConfig(mode="systemd-user", service_name="cf.service", poll_interval_ms=3000)
+        cfg = AppConfig(
+            mode="systemd-user",
+            service_name="cf.service",
+            tunnel_token="cloudflared.exe service install eyJsmoke",
+            poll_interval_ms=3000,
+        )
         dlg = SettingsDialog(cfg)
         built = dlg.build_config()
         self.assertEqual(built.mode, "systemd-user")
         self.assertEqual(built.service_name, "cf.service")
+        self.assertEqual(built.tunnel_token, "eyJsmoke")
         self.assertEqual(built.poll_interval_ms, 3000)
         dlg.close()
 

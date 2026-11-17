@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..config import AppConfig, ServiceMode
+from ..config import AppConfig, ServiceMode, normalize_tunnel_token
 from .theme import DIALOG_QSS
 
 
@@ -47,6 +47,18 @@ class SettingsDialog(QDialog):
 
         self._service_edit = QLineEdit(config.service_name)
         form.addRow("Systemd Unit:", self._service_edit)
+
+        token_row = QHBoxLayout()
+        token_row.setSpacing(6)
+        self._token_edit = QLineEdit(config.tunnel_token)
+        self._token_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self._token_edit.setPlaceholderText("Paste tunnel token (eyJ...)")
+        self._token_toggle_btn = QPushButton("Show")
+        self._token_toggle_btn.setCheckable(True)
+        self._token_toggle_btn.toggled.connect(self._toggle_token_visibility)
+        token_row.addWidget(self._token_edit, 1)
+        token_row.addWidget(self._token_toggle_btn)
+        form.addRow("Tunnel Token:", token_row)
 
         self._metrics_edit = QLineEdit(config.metrics_url)
         self._metrics_edit.setPlaceholderText("http://127.0.0.1:20241/metrics")
@@ -86,6 +98,12 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(buttons)
 
+    def _toggle_token_visibility(self, checked: bool) -> None:
+        self._token_edit.setEchoMode(
+            QLineEdit.EchoMode.Normal if checked else QLineEdit.EchoMode.Password
+        )
+        self._token_toggle_btn.setText("Hide" if checked else "Show")
+
     def build_config(self) -> AppConfig:
         mode_text = self._mode_combo.currentText()
         mode: ServiceMode = (
@@ -96,6 +114,7 @@ class SettingsDialog(QDialog):
         return AppConfig(
             mode=mode,
             service_name=self._service_edit.text().strip() or "cloudflared.service",
+            tunnel_token=normalize_tunnel_token(self._token_edit.text()),
             metrics_url=self._metrics_edit.text().strip(),
             poll_interval_ms=self._poll_spin.value(),
             persist_stats=self._persist_chk.isChecked(),

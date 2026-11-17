@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import shlex
 import subprocess
 import time
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
-from .config import AppConfig
+from .config import AppConfig, normalize_tunnel_token
 from .metrics import (
     PrometheusSnapshot,
     TrafficStats,
@@ -282,6 +284,26 @@ class TunnelController:
         except (OSError, subprocess.SubprocessError) as exc:
             return ActionResult(False, str(exc))
 
+    def _build_process_command_and_env(self) -> tuple[list[str], dict[str, str]]:
+        args = shlex.split(self.config.process_command)
+        if not args:
+            return [], dict(os.environ)
+
+        if "--metrics" not in args and self.config.metrics_url:
+            parsed = urlparse(self.config.metrics_url)
+            if parsed.netloc:
+                if "run" in args:
+                    run_idx = args.index("run")
+                    args = [*args[:run_idx], "--metrics", parsed.netloc, *args[run_idx:]]
+                else:
+                    args.extend(["--metrics", parsed.netloc])
+
+        env = dict(os.environ)
+        token = normalize_tunnel_token(self.config.tunnel_token)
+        if token and "--token" not in args:
+            env["TUNNEL_TOKEN"] = token
+        return args, env
+
     def start(self) -> ActionResult:
         mode = self.resolve_mode()
         if mode == "systemd-user":
@@ -292,11 +314,12 @@ class TunnelController:
         if self._managed_proc is not None and self._managed_proc.poll() is None:
             return ActionResult(True, "Tunnel already running")
         try:
-            args = shlex.split(self.config.process_command)
+            args, env = self._build_process_command_and_env()
             if not args:
                 return ActionResult(False, "Empty process command")
             self._managed_proc = subprocess.Popen(
                 args,
+                env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,

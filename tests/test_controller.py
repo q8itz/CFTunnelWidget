@@ -45,6 +45,18 @@ class TestController(unittest.TestCase):
             self.assertEqual(state.traffic.session_rx, 2048)
             self.assertEqual(state.traffic.session_tx, 1024)
 
+    def test_process_command_injects_metrics_and_token_env(self) -> None:
+        cfg = AppConfig(
+            mode="process",
+            tunnel_token="cloudflared.exe service install eyJmysecret",
+            metrics_url="http://127.0.0.1:20241/metrics",
+            process_command="cloudflared tunnel run",
+        )
+        ctrl = TunnelController(cfg, tracker=TrafficTracker(persist=False))
+        args, env = ctrl._build_process_command_and_env()
+        self.assertEqual(args, ["cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "run"])
+        self.assertEqual(env["TUNNEL_TOKEN"], "eyJmysecret")
+
 
 if __name__ == "__main__":
     unittest.main()
