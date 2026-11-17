@@ -25,7 +25,7 @@ A sleek, native Linux system tray widget (Wayland & X11) for monitoring and cont
 python3 main.py
 ```
 
-Or install the desktop launcher:
+Or install the desktop launcher and enable the `systemd --user` service (starts the tray widget on login without auto-starting the tunnel):
 
 ```bash
 chmod +x install.sh
