@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -70,7 +71,7 @@ class TunnelPopover(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self.setFixedWidth(360)
+        self.setFixedWidth(420)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -86,7 +87,7 @@ class TunnelPopover(QWidget):
 
         # --- Header ---
         header = QHBoxLayout()
-        header.setSpacing(10)
+        header.setSpacing(8)
 
         self._icon_lbl = QLabel()
         self._icon_lbl.setFixedSize(28, 28)
@@ -99,17 +100,20 @@ class TunnelPopover(QWidget):
         title_lbl.setObjectName("TitleLabel")
         self._backend_lbl = QLabel("systemd")
         self._backend_lbl.setObjectName("SubLabel")
+        self._backend_lbl.setMinimumWidth(0)
         title_col.addWidget(title_lbl)
         title_col.addWidget(self._backend_lbl)
         header.addLayout(title_col, 1)
 
         self._status_pill = QLabel("● Stopped")
         self._status_pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_pill.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._apply_pill_style(STATUS_STOPPED)
         header.addWidget(self._status_pill)
 
         settings_btn = QPushButton("⚙")
         settings_btn.setObjectName("IconBtn")
+        settings_btn.setFixedSize(26, 26)
         settings_btn.setToolTip("Settings")
         settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         settings_btn.clicked.connect(self.settings_requested.emit)
@@ -117,6 +121,7 @@ class TunnelPopover(QWidget):
 
         close_btn = QPushButton("✕")
         close_btn.setObjectName("IconBtn")
+        close_btn.setFixedSize(26, 26)
         close_btn.setToolTip("Hide")
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.clicked.connect(self.hide)
@@ -224,7 +229,10 @@ class TunnelPopover(QWidget):
                 has_error=bool(state.error),
             ).pixmap(28, 28)
         )
-        self._backend_lbl.setText(f"{service_name} · {state.backend_label}")
+        if state.backend_label == "process":
+            self._backend_lbl.setText("cloudflared · process")
+        else:
+            self._backend_lbl.setText(f"{service_name} · {state.backend_label}")
 
         if state.error and not state.active:
             self._apply_pill_style(STATUS_ERROR)
