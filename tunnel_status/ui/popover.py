@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QCursor, QGuiApplication, QKeyEvent
+from PyQt6.QtCore import QPoint, Qt, pyqtSignal
+from PyQt6.QtGui import QCursor, QGuiApplication, QKeyEvent, QMouseEvent
 from PyQt6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -195,6 +195,8 @@ class TunnelPopover(QWidget):
 
         self._is_active = False
         self._busy = False
+        self._user_moved = False
+        self._drag_offset: QPoint | None = None
 
     def _apply_pill_style(self, hex_color: str) -> None:
         self._status_pill.setStyleSheet(
@@ -295,15 +297,43 @@ class TunnelPopover(QWidget):
 
     def show_near_tray(self) -> None:
         self.adjustSize()
-        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
-        if screen is not None:
-            avail = screen.availableGeometry()
-            x = avail.right() - self.width() - 12
-            y = avail.bottom() - self.height() - 12
-            self.move(max(avail.left() + 8, x), max(avail.top() + 8, y))
+        if not self._user_moved:
+            screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+            if screen is not None:
+                avail = screen.availableGeometry()
+                x = avail.right() - self.width() - 12
+                y = avail.bottom() - self.height() - 12
+                self.move(max(avail.left() + 8, x), max(avail.top() + 8, y))
         self.show()
         self.raise_()
         self.activateWindow()
+
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
+            handle = self.windowHandle()
+            if handle is not None and handle.startSystemMove():
+                self._user_moved = True
+                event.accept()
+                return
+            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
+        if event is not None and self._drag_offset is not None and (
+            event.buttons() & Qt.MouseButton.LeftButton
+        ):
+            self._user_moved = True
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:  # noqa: N802
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
+            self._drag_offset = None
+        super().mouseReleaseEvent(event)
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:  # noqa: N802
         if event is not None and event.key() == Qt.Key.Key_Escape:
