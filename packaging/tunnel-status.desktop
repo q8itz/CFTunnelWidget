@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Tunnel Status
+Comment=Cloudflare Tunnel system tray monitor & controller
+Exec=tunnel-status
+Icon=network-vpn
+Terminal=false
+Categories=Network;System;Monitor;
+StartupNotify=false
+X-GNOME-Autostart-enabled=true

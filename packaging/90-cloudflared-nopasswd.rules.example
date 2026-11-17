@@ -1,0 +1,10 @@
+// Example Polkit rule: /etc/polkit-1/rules.d/90-cloudflared-nopasswd.rules
+// Allows users in the "sudo" or "wheel" group to start/stop/restart cloudflared.service without a password.
+
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "cloudflared.service" &&
+        (subject.isInGroup("sudo") || subject.isInGroup("wheel"))) {
+        return polkit.Result.YES;
+    }
+});

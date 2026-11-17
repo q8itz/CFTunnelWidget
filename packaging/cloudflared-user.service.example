@@ -1,0 +1,16 @@
+# Example systemd user unit: ~/.config/systemd/user/cloudflared.service
+# Enables passwordless start/stop from the tray widget + kernel IPAccounting.
+
+[Unit]
+Description=Cloudflare Tunnel (User)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/cloudflared tunnel --metrics 127.0.0.1:20241 run
+Restart=on-failure
+RestartSec=5s
+IPAccounting=yes
+
+[Install]
+WantedBy=default.target
