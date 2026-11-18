@@ -51,8 +51,10 @@ class TestUISmoke(unittest.TestCase):
             ha_connections=4,
             metrics_available=True,
             ip_accounting_available=True,
+            logs=("INF Starting tunnel", "INF Registered tunnel connection"),
         )
         popover.update_state(state, "cloudflared.service")
+        self.assertIn("Registered tunnel connection", popover._log_console.toPlainText())
         popover.repaint()
         popover.close()
 

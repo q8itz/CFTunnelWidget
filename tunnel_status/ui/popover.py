@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -62,6 +63,7 @@ class TunnelPopover(QWidget):
     stop_requested = pyqtSignal()
     restart_requested = pyqtSignal()
     settings_requested = pyqtSignal()
+    clear_logs_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -168,6 +170,41 @@ class TunnelPopover(QWidget):
         graph_layout.addWidget(self._sparkline)
         root.addWidget(graph_card)
 
+        # --- Shell / Daemon Logs ---
+        log_card = QFrame()
+        log_card.setObjectName("GraphCard")
+        log_layout = QVBoxLayout(log_card)
+        log_layout.setContentsMargins(10, 8, 10, 8)
+        log_layout.setSpacing(6)
+
+        log_hdr = QHBoxLayout()
+        l_title = QLabel("TUNNEL LOGS")
+        l_title.setObjectName("TileTitle")
+        log_hdr.addWidget(l_title)
+        log_hdr.addStretch(1)
+
+        self._clear_logs_btn = QPushButton("Clear")
+        self._clear_logs_btn.setObjectName("MiniLinkBtn")
+        self._clear_logs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_logs_btn.clicked.connect(self._on_clear_logs)
+        log_hdr.addWidget(self._clear_logs_btn)
+
+        self._toggle_logs_btn = QPushButton("Hide ▾")
+        self._toggle_logs_btn.setObjectName("MiniLinkBtn")
+        self._toggle_logs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._toggle_logs_btn.clicked.connect(self._toggle_logs_visibility)
+        log_hdr.addWidget(self._toggle_logs_btn)
+        log_layout.addLayout(log_hdr)
+
+        self._log_console = QPlainTextEdit()
+        self._log_console.setObjectName("LogConsole")
+        self._log_console.setReadOnly(True)
+        self._log_console.setPlaceholderText("No tunnel output yet. Click Start Tunnel to view live shell logs...")
+        self._log_console.setFixedHeight(112)
+        self._log_console.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        log_layout.addWidget(self._log_console)
+        root.addWidget(log_card)
+
         # --- Hint / Error Banner ---
         self._hint_lbl = QLabel("")
         self._hint_lbl.setWordWrap(True)
@@ -197,6 +234,7 @@ class TunnelPopover(QWidget):
         self._busy = False
         self._user_moved = False
         self._drag_offset: QPoint | None = None
+        self._last_log_text: str = ""
 
     def _apply_pill_style(self, hex_color: str) -> None:
         self._status_pill.setStyleSheet(
@@ -214,6 +252,18 @@ class TunnelPopover(QWidget):
             self.stop_requested.emit()
         else:
             self.start_requested.emit()
+
+    def _on_clear_logs(self) -> None:
+        self._last_log_text = ""
+        self._log_console.clear()
+        self.clear_logs_requested.emit()
+
+    def _toggle_logs_visibility(self) -> None:
+        visible = not self._log_console.isVisible()
+        self._log_console.setVisible(visible)
+        self._clear_logs_btn.setVisible(visible)
+        self._toggle_logs_btn.setText("Hide ▾" if visible else "Show ▸")
+        self.adjustSize()
 
     def set_busy(self, busy: bool, label: str = "Working...") -> None:
         self._busy = busy
@@ -270,6 +320,15 @@ class TunnelPopover(QWidget):
         self._up_sub.setText(" · ".join(health_parts) if health_parts else state.substate)
 
         self._sparkline.set_series(t.history_rx, t.history_tx)
+
+        log_text = "\n".join(state.logs)
+        if log_text != self._last_log_text:
+            self._last_log_text = log_text
+            scrollbar = self._log_console.verticalScrollBar()
+            at_bottom = scrollbar is None or scrollbar.value() >= scrollbar.maximum() - 4
+            self._log_console.setPlainText(log_text)
+            if at_bottom and scrollbar is not None:
+                scrollbar.setValue(scrollbar.maximum())
 
         if state.error:
             self._hint_lbl.setText(f"Note: {state.error}")

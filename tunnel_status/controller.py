@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -37,6 +39,7 @@ class TunnelState:
     metrics_available: bool
     ip_accounting_available: bool
     error: str | None = None
+    logs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -77,9 +80,55 @@ class TunnelController:
             stats_path=AppConfig.stats_path(),
             persist=config.persist_stats,
         )
-        self._managed_proc: subprocess.Popen[bytes] | None = None
+        self._managed_proc: subprocess.Popen[str] | None = None
         self._proc_start_monotonic: float | None = None
         self._resolved_mode: str | None = None
+        self._log_lock = threading.Lock()
+        self._log_lines: deque[str] = deque(maxlen=400)
+
+    def _append_log(self, line: str) -> None:
+        cleaned = line.rstrip("\r\n")
+        if not cleaned:
+            return
+        with self._log_lock:
+            self._log_lines.append(cleaned)
+
+    def clear_logs(self) -> None:
+        with self._log_lock:
+            self._log_lines.clear()
+
+    def get_logs(self) -> tuple[str, ...]:
+        with self._log_lock:
+            return tuple(self._log_lines)
+
+    def _drain_process_output(self, proc: subprocess.Popen[str]) -> None:
+        if proc.stdout is not None:
+            try:
+                for line in proc.stdout:
+                    self._append_log(line)
+            except (OSError, ValueError):
+                pass
+            finally:
+                try:
+                    proc.stdout.close()
+                except OSError:
+                    pass
+        rc = proc.poll()
+        if rc is not None:
+            self._append_log(f"[tunnel-status] cloudflared exited with code {rc}")
+
+    def _query_journalctl(self, user_scope: bool, lines: int = 80) -> tuple[str, ...]:
+        cmd = ["journalctl"]
+        if user_scope:
+            cmd.append("--user")
+        cmd.extend(["-u", self.config.service_name, "-n", str(lines), "--no-pager", "-o", "short"])
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=2.0)
+            if res.returncode == 0 and res.stdout:
+                return tuple(res.stdout.splitlines())
+        except (OSError, subprocess.SubprocessError):
+            pass
+        return ()
 
     def update_config(self, config: AppConfig) -> None:
         self.config = config
@@ -232,6 +281,7 @@ class TunnelController:
                 metrics_available=prom is not None,
                 ip_accounting_available=ip_acct_ok,
                 error=None if active_state != "failed" else "Service entered failed state",
+                logs=self._query_journalctl(user_scope=user_scope),
             )
 
         # Direct process mode
@@ -268,6 +318,7 @@ class TunnelController:
             ha_connections=prom.ha_connections if prom else None,
             metrics_available=prom is not None,
             ip_accounting_available=False,
+            logs=self.get_logs(),
         )
 
     def _run_systemctl(self, user_scope: bool, action: str) -> ActionResult:
@@ -317,16 +368,26 @@ class TunnelController:
             args, env = self._build_process_command_and_env()
             if not args:
                 return ActionResult(False, "Empty process command")
+            self._append_log(f"$ {shlex.join(args)}")
             self._managed_proc = subprocess.Popen(
                 args,
                 env=env,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
                 start_new_session=True,
             )
             self._proc_start_monotonic = time.monotonic()
+            reader = threading.Thread(
+                target=self._drain_process_output,
+                args=(self._managed_proc,),
+                daemon=True,
+            )
+            reader.start()
             return ActionResult(True, "Started cloudflared process")
         except OSError as exc:
+            self._append_log(f"[tunnel-status] Failed to start: {exc}")
             return ActionResult(False, str(exc))
 
     def stop(self) -> ActionResult:
@@ -337,6 +398,7 @@ class TunnelController:
             return self._run_systemctl(False, "stop")
 
         if self._managed_proc is not None and self._managed_proc.poll() is None:
+            self._append_log("[tunnel-status] Stopping cloudflared...")
             self._managed_proc.terminate()
             try:
                 self._managed_proc.wait(timeout=5.0)

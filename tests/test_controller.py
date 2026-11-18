@@ -57,6 +57,18 @@ class TestController(unittest.TestCase):
         self.assertEqual(args, ["cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "run"])
         self.assertEqual(env["TUNNEL_TOKEN"], "eyJmysecret")
 
+    def test_log_buffer_append_and_clear(self) -> None:
+        cfg = AppConfig(mode="process", metrics_url="")
+        ctrl = TunnelController(cfg, tracker=TrafficTracker(persist=False))
+        ctrl._append_log("INF Starting tunnel")
+        ctrl._append_log("INF Registered tunnel connection")
+        self.assertEqual(
+            ctrl.get_logs(),
+            ("INF Starting tunnel", "INF Registered tunnel connection"),
+        )
+        ctrl.clear_logs()
+        self.assertEqual(ctrl.get_logs(), ())
+
 
 if __name__ == "__main__":
     unittest.main()

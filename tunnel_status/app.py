@@ -55,6 +55,7 @@ class TunnelTrayApp(QObject):
         self._popover.stop_requested.connect(lambda: self._run_action("stop"))
         self._popover.restart_requested.connect(lambda: self._run_action("restart"))
         self._popover.settings_requested.connect(self._open_settings)
+        self._popover.clear_logs_requested.connect(self._controller.clear_logs)
 
         # Tray icon & right-click context menu
         self._tray = QSystemTrayIcon(build_tray_icon(False), self)

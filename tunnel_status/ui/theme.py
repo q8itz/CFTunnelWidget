@@ -33,6 +33,26 @@ QFrame#GraphCard {{
     border: 1px solid rgba(255, 255, 255, 0.05);
     border-radius: 10px;
 }}
+QPlainTextEdit#LogConsole {{
+    background-color: #0B0E14;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    color: #CBD5E1;
+    font-family: "JetBrains Mono", "Fira Code", "Noto Sans Mono", monospace;
+    font-size: 10px;
+    padding: 6px;
+    selection-background-color: #0284C7;
+}}
+QPushButton#MiniLinkBtn {{
+    background-color: transparent;
+    border: none;
+    color: {TEXT_SECONDARY};
+    font-size: 10px;
+    padding: 2px 4px;
+}}
+QPushButton#MiniLinkBtn:hover {{
+    color: {TEXT_PRIMARY};
+}}
 QLabel#TitleLabel {{
     color: {TEXT_PRIMARY};
     font-size: 14px;
