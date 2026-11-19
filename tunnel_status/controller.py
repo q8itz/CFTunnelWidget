@@ -17,6 +17,7 @@ from .metrics import (
     TrafficStats,
     TrafficTracker,
     fetch_prometheus_metrics,
+    read_proc_io_bytes,
 )
 
 _UINT64_MAX_STR = "18446744073709551615"
@@ -193,6 +194,24 @@ class TunnelController:
             pass
         return None
 
+    def _resolve_raw_bytes(
+        self,
+        ip_in: int | None,
+        ip_out: int | None,
+        prom: PrometheusSnapshot | None,
+        pid: int | None,
+    ) -> tuple[int | None, int | None]:
+        if ip_in is not None and ip_out is not None:
+            return ip_in, ip_out
+        if prom is not None and prom.rx_bytes is not None and prom.tx_bytes is not None:
+            return prom.rx_bytes, prom.tx_bytes
+        proc_io = read_proc_io_bytes(pid)
+        if proc_io is not None:
+            return proc_io
+        if prom is not None and prom.net_rx_bytes is not None and prom.net_tx_bytes is not None:
+            return prom.net_rx_bytes, prom.net_tx_bytes
+        return None, None
+
     def get_status(self) -> TunnelState:
         mode = self.resolve_mode()
         prom: PrometheusSnapshot | None = fetch_prometheus_metrics(self.config.metrics_url)
@@ -253,10 +272,13 @@ class TunnelController:
             ip_in = _parse_uint(props.get("IPIngressBytes"))
             ip_out = _parse_uint(props.get("IPEgressBytes"))
             ip_acct_ok = ip_in is not None and ip_out is not None
+            main_pid = _parse_uint(props.get("MainPID")) if is_active else None
 
-            raw_rx = ip_in if ip_acct_ok else (prom.rx_bytes if prom else None)
-            raw_tx = ip_out if ip_acct_ok else (prom.tx_bytes if prom else None)
-            traffic = self.tracker.update(raw_rx if is_active else None, raw_tx if is_active else None)
+            if is_active:
+                raw_rx, raw_tx = self._resolve_raw_bytes(ip_in, ip_out, prom, main_pid)
+            else:
+                raw_rx, raw_tx = None, None
+            traffic = self.tracker.update(raw_rx, raw_tx)
 
             state_label = {
                 "active": "Connected",
@@ -286,23 +308,27 @@ class TunnelController:
 
         # Direct process mode
         running = False
+        active_pid: int | None = None
         if self._managed_proc is not None:
             if self._managed_proc.poll() is None:
                 running = True
+                active_pid = self._managed_proc.pid
             else:
                 self._managed_proc = None
                 self._proc_start_monotonic = None
 
         if not running:
-            ext_pid = self._find_external_cloudflared_pid()
-            running = ext_pid is not None
+            active_pid = self._find_external_cloudflared_pid()
+            running = active_pid is not None
 
         uptime_sec = None
         if running and self._proc_start_monotonic is not None:
             uptime_sec = max(0, int(time.monotonic() - self._proc_start_monotonic))
 
-        raw_rx = prom.rx_bytes if (running and prom) else None
-        raw_tx = prom.tx_bytes if (running and prom) else None
+        if running:
+            raw_rx, raw_tx = self._resolve_raw_bytes(None, None, prom, active_pid)
+        else:
+            raw_rx, raw_tx = None, None
         traffic = self.tracker.update(raw_rx, raw_tx)
 
         return TunnelState(

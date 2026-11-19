@@ -60,6 +60,35 @@ class PrometheusSnapshot:
     ha_connections: int | None = None
     rx_bytes: int | None = None
     tx_bytes: int | None = None
+    net_rx_bytes: int | None = None
+    net_tx_bytes: int | None = None
+
+
+def read_proc_io_bytes(pid: int | None) -> tuple[int, int] | None:
+    """Read per-process (rchar, wchar) from /proc/<pid>/io on Linux."""
+    if pid is None or pid <= 0:
+        return None
+    io_path = Path(f"/proc/{pid}/io")
+    try:
+        content = io_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    rchar: int | None = None
+    wchar: int | None = None
+    for line in content.splitlines():
+        if line.startswith("rchar:"):
+            try:
+                rchar = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+        elif line.startswith("wchar:"):
+            try:
+                wchar = int(line.split(":", 1)[1].strip())
+            except ValueError:
+                pass
+    if rchar is not None and wchar is not None:
+        return rchar, wchar
+    return None
 
 
 def parse_prometheus_text(text: str) -> dict[str, float]:
@@ -100,17 +129,20 @@ def fetch_prometheus_metrics(url: str, timeout: float = 1.2) -> PrometheusSnapsh
     if not parsed:
         return None
 
-    def _opt_int(key: str) -> int | None:
-        return int(parsed[key]) if key in parsed else None
+    def _first_int(*keys: str) -> int | None:
+        for key in keys:
+            if key in parsed:
+                return int(parsed[key])
+        return None
 
-    rx = _opt_int("quic_client_total_bytes_received")
-    tx = _opt_int("quic_client_total_bytes_sent")
     return PrometheusSnapshot(
-        total_requests=_opt_int("cloudflared_tunnel_total_requests"),
-        request_errors=_opt_int("cloudflared_tunnel_request_errors"),
-        ha_connections=_opt_int("cloudflared_tunnel_ha_connections"),
-        rx_bytes=rx,
-        tx_bytes=tx,
+        total_requests=_first_int("cloudflared_tunnel_total_requests"),
+        request_errors=_first_int("cloudflared_tunnel_request_errors"),
+        ha_connections=_first_int("cloudflared_tunnel_ha_connections"),
+        rx_bytes=_first_int("quic_client_total_bytes_received", "quic_client_receive_bytes"),
+        tx_bytes=_first_int("quic_client_total_bytes_sent", "quic_client_sent_bytes"),
+        net_rx_bytes=_first_int("process_network_receive_bytes_total"),
+        net_tx_bytes=_first_int("process_network_transmit_bytes_total"),
     )
 
 
@@ -232,6 +264,8 @@ class TrafficTracker:
             self._last_raw_tx = raw_tx
             self._last_time = ts
         else:
+            self._last_raw_rx = None
+            self._last_raw_tx = None
             self._last_time = ts
 
         self._history_rx.append(rx_rate)

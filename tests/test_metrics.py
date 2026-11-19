@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from tunnel_status.metrics import (
     format_bytes,
     format_uptime,
     parse_prometheus_text,
+    read_proc_io_bytes,
 )
 
 
@@ -67,6 +69,13 @@ quic_client_total_bytes_sent{conn="0"} 500
             s4 = reloaded.update(None, None, now=15.0)
             self.assertEqual(s4.all_time_rx, 3200)
             self.assertEqual(s4.all_time_tx, 1600)
+
+    def test_read_proc_io_bytes_for_current_process(self) -> None:
+        res = read_proc_io_bytes(os.getpid())
+        self.assertIsNotNone(res)
+        rchar, wchar = res  # type: ignore[misc]
+        self.assertGreaterEqual(rchar, 0)
+        self.assertGreaterEqual(wchar, 0)
 
 
 if __name__ == "__main__":
