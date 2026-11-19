@@ -63,6 +63,7 @@ class TestUISmoke(unittest.TestCase):
             mode="systemd-user",
             service_name="cf.service",
             tunnel_token="cloudflared.exe service install eyJsmoke",
+            edge_ip_version="6",
             poll_interval_ms=3000,
         )
         dlg = SettingsDialog(cfg)
@@ -70,6 +71,7 @@ class TestUISmoke(unittest.TestCase):
         self.assertEqual(built.mode, "systemd-user")
         self.assertEqual(built.service_name, "cf.service")
         self.assertEqual(built.tunnel_token, "eyJsmoke")
+        self.assertEqual(built.edge_ip_version, "6")
         self.assertEqual(built.poll_interval_ms, 3000)
         dlg.close()
 

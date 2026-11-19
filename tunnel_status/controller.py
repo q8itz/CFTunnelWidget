@@ -335,19 +335,26 @@ class TunnelController:
         except (OSError, subprocess.SubprocessError) as exc:
             return ActionResult(False, str(exc))
 
+    def _inject_tunnel_flag(self, args: list[str], flag: str, value: str) -> list[str]:
+        if flag in args:
+            return args
+        if "run" in args:
+            run_idx = args.index("run")
+            return [*args[:run_idx], flag, value, *args[run_idx:]]
+        return [*args, flag, value]
+
     def _build_process_command_and_env(self) -> tuple[list[str], dict[str, str]]:
         args = shlex.split(self.config.process_command)
         if not args:
             return [], dict(os.environ)
 
-        if "--metrics" not in args and self.config.metrics_url:
+        if self.config.edge_ip_version in ("4", "6"):
+            args = self._inject_tunnel_flag(args, "--edge-ip-version", self.config.edge_ip_version)
+
+        if self.config.metrics_url:
             parsed = urlparse(self.config.metrics_url)
             if parsed.netloc:
-                if "run" in args:
-                    run_idx = args.index("run")
-                    args = [*args[:run_idx], "--metrics", parsed.netloc, *args[run_idx:]]
-                else:
-                    args.extend(["--metrics", parsed.netloc])
+                args = self._inject_tunnel_flag(args, "--metrics", parsed.netloc)
 
         env = dict(os.environ)
         token = normalize_tunnel_token(self.config.tunnel_token)

@@ -20,6 +20,7 @@ class TestAppConfig(unittest.TestCase):
                 mode="systemd-user",
                 service_name="cloudflared-home.service",
                 tunnel_token="eyJtesttoken123",
+                edge_ip_version="6",
                 metrics_url="http://127.0.0.1:9999/metrics",
                 poll_interval_ms=1500,
                 persist_stats=False,

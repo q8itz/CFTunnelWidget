@@ -49,12 +49,24 @@ class TestController(unittest.TestCase):
         cfg = AppConfig(
             mode="process",
             tunnel_token="cloudflared.exe service install eyJmysecret",
+            edge_ip_version="6",
             metrics_url="http://127.0.0.1:20241/metrics",
             process_command="cloudflared tunnel run",
         )
         ctrl = TunnelController(cfg, tracker=TrafficTracker(persist=False))
         args, env = ctrl._build_process_command_and_env()
-        self.assertEqual(args, ["cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "run"])
+        self.assertEqual(
+            args,
+            [
+                "cloudflared",
+                "tunnel",
+                "--edge-ip-version",
+                "6",
+                "--metrics",
+                "127.0.0.1:20241",
+                "run",
+            ],
+        )
         self.assertEqual(env["TUNNEL_TOKEN"], "eyJmysecret")
 
     def test_log_buffer_append_and_clear(self) -> None:

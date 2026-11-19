@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 ServiceMode = Literal["auto", "systemd-system", "systemd-user", "process"]
+EdgeIpVersion = Literal["auto", "6", "4"]
 
 
 def _xdg_config_home() -> Path:
@@ -46,6 +47,7 @@ class AppConfig:
     mode: ServiceMode = "auto"
     service_name: str = "cloudflared.service"
     tunnel_token: str = ""
+    edge_ip_version: EdgeIpVersion = "auto"
     metrics_url: str = "http://127.0.0.1:20241/metrics"
     poll_interval_ms: int = 2000
     persist_stats: bool = True
@@ -74,6 +76,10 @@ class AppConfig:
         if mode not in ("auto", "systemd-system", "systemd-user", "process"):
             mode = defaults.mode
 
+        edge_ip = str(raw.get("edge_ip_version", defaults.edge_ip_version))
+        if edge_ip not in ("auto", "6", "4"):
+            edge_ip = defaults.edge_ip_version
+
         poll = raw.get("poll_interval_ms", defaults.poll_interval_ms)
         if not isinstance(poll, int) or poll < 500:
             poll = defaults.poll_interval_ms
@@ -82,6 +88,7 @@ class AppConfig:
             mode=mode,
             service_name=str(raw.get("service_name", defaults.service_name)),
             tunnel_token=normalize_tunnel_token(str(raw.get("tunnel_token", defaults.tunnel_token))),
+            edge_ip_version=edge_ip,
             metrics_url=str(raw.get("metrics_url", defaults.metrics_url)),
             poll_interval_ms=poll,
             persist_stats=bool(raw.get("persist_stats", defaults.persist_stats)),
